@@ -1,9 +1,9 @@
 {
-	"name": "capture-web",
+	"name": "capture-anything",
 	"version": "1.0.0",
 	"description": "Capture img or pdf of websites",
 	"license": "MIT",
-	"repository": "zhlhzhu/capture-web",
+	"repository": "zhlhzhu/capture-anything",
 	"author": {
 		"name": "zhlhzhu",
 		"email": "zhlh_zhu@163.com",
