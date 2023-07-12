@@ -204,7 +204,7 @@ const internalCaptureWebsiteCore = async (input, options, page, browser) => {
 
 	const screenshotOptions = {};
 
-	if (options.type) {
+	if (options.type && options.type !== 'pdf') {
 		screenshotOptions.type = options.type;
 	}
 
@@ -431,7 +431,12 @@ const internalCaptureWebsiteCore = async (input, options, page, browser) => {
 		screenshotOptions.clip = {x, y, width, height};
 	}
 
-	const buffer = await page.screenshot(screenshotOptions);
+	let buffer;
+	if (options.type !== 'pdf') {
+		buffer = await page.screenshot(screenshotOptions);
+	} else {
+		buffer = await page.pdf(screenshotOptions);
+	}
 
 	return buffer;
 };

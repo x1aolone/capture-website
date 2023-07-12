@@ -1,14 +1,13 @@
 {
-	"name": "capture-website",
-	"version": "3.2.0",
-	"description": "Capture screenshots of websites",
+	"name": "capture-web",
+	"version": "1.0.0",
+	"description": "Capture img or pdf of websites",
 	"license": "MIT",
-	"repository": "sindresorhus/capture-website",
-	"funding": "https://github.com/sponsors/sindresorhus",
+	"repository": "zhlhzhu/capture-web",
 	"author": {
-		"name": "Sindre Sorhus",
-		"email": "sindresorhus@gmail.com",
-		"url": "https://sindresorhus.com"
+		"name": "zhlhzhu",
+		"email": "zhlh_zhu@163.com",
+		"url": "https://www.zhlhzhu.com"
 	},
 	"type": "module",
 	"exports": "./index.js",
