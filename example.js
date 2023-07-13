@@ -4,7 +4,9 @@ import captureWebsite from './index.js';
 
 (async () => {
 	await captureWebsite.file('https://www.zhlhzhu.com', 'example.pdf', {
-		type: 'pdf'
+		type: 'pdf',
+		width: 200,
+		height: 300
 	});
 	await captureWebsite.file('https://www.zhlhzhu.com', 'example.png');
 })();
