@@ -172,6 +172,22 @@ const internalCaptureWebsite = async (input, options) => {
 };
 
 const internalCaptureWebsiteCore = async (input, options, page, browser) => {
+	const type = options.type;
+
+	let buffer;
+	if (type === 'pdf') {
+		buffer = await capturePdf(input, options, page, browser);
+	} else {
+		buffer = await captureImage(input, options, page, browser);
+	}
+
+	return buffer;
+};
+
+/**
+ * capture as image
+ */
+const captureImage = async (input, options, page, browser) => {
 	options = {
 		inputType: 'url',
 		width: 1280,
@@ -183,7 +199,6 @@ const internalCaptureWebsiteCore = async (input, options, page, browser) => {
 		delay: 0,
 		debug: false,
 		darkMode: false,
-		_keepAlive: false,
 		isJavaScriptEnabled: true,
 		blockAds: true,
 		inset: 0,
@@ -204,7 +219,7 @@ const internalCaptureWebsiteCore = async (input, options, page, browser) => {
 
 	const screenshotOptions = {};
 
-	if (options.type && options.type !== 'pdf') {
+	if (options.type) {
 		screenshotOptions.type = options.type;
 	}
 
@@ -431,15 +446,175 @@ const internalCaptureWebsiteCore = async (input, options, page, browser) => {
 		screenshotOptions.clip = {x, y, width, height};
 	}
 
-	let buffer;
-	if (options.type !== 'pdf') {
-		buffer = await page.screenshot(screenshotOptions);
-	} else {
-		buffer = await page.pdf(screenshotOptions);
+	const buffer = await page.screenshot(screenshotOptions);
+	return buffer;
+}
+
+/**
+ * capture as pdf
+ */
+const capturePdf = async (input, options, page, browser) => {
+
+	// 直接把用户传入的 options 传进去, 用户可以直接看文档来传参
+	const pdfOptions = {
+		...options
+	};
+
+	options = {
+		inputType: 'url',
+		fullPage: false,
+		defaultBackground: true,
+		timeout: 60, // The Puppeteer default of 30 is too short
+		delay: 0,
+		debug: false,
+		darkMode: false,
+		_keepAlive: false,
+		isJavaScriptEnabled: true,
+		...options,
+	};
+	// 直接把这里的 options 扔进去 pdfOptions 算了, 还做什么 adapter
+
+	const isHTMLContent = options.inputType === 'html';
+
+	input = isHTMLContent || isUrl(input) ? input : fileUrl(input);
+
+	const timeoutInMilliseconds = options.timeout * 1000;
+
+	if (typeof options.defaultBackground === 'boolean') {
+		pdfOptions.omitBackground = !options.defaultBackground;
 	}
 
+	await page.setBypassCSP(true);
+	await page.setJavaScriptEnabled(options.isJavaScriptEnabled);
+
+	if (options.debug) {
+		page.on('console', message => {
+			let {url, lineNumber, columnNumber} = message.location();
+			lineNumber = lineNumber ? `:${lineNumber}` : '';
+			columnNumber = columnNumber ? `:${columnNumber}` : '';
+			const location = url ? ` (${url}${lineNumber}${columnNumber})` : '';
+			console.log(`\nPage log:${location}\n${message.text()}\n`);
+		});
+
+		page.on('pageerror', error => {
+			console.log('\nPage error:', error, '\n');
+		});
+
+		// TODO: Add more events from https://github.com/GoogleChrome/puppeteer/blob/master/docs/api.md#event-requestfailed
+	}
+
+	if (options.authentication) {
+		await page.authenticate(options.authentication);
+	}
+
+	if (options.cookies) {
+		const cookies = options.cookies.map(cookie => parseCookie(isHTMLContent ? 'about:blank' : input, cookie));
+		await page.setCookie(...cookies);
+	}
+
+	if (options.headers) {
+		await page.setExtraHTTPHeaders(options.headers);
+	}
+
+	if (options.userAgent) {
+		await page.setUserAgent(options.userAgent);
+	}
+
+	if (options.emulateDevice) {
+		if (!(options.emulateDevice in KnownDevices)) {
+			throw new Error(`The device name \`${options.emulateDevice}\` is not supported`);
+		}
+
+		await page.emulate(KnownDevices[options.emulateDevice]);
+	}
+
+	await page.emulateMediaFeatures([{
+		name: 'prefers-color-scheme',
+		value: options.darkMode ? 'dark' : 'light',
+	}]);
+
+	await page[isHTMLContent ? 'setContent' : 'goto'](input, {
+		timeout: timeoutInMilliseconds,
+		waitUntil: 'networkidle2',
+	});
+
+	if (options.disableAnimations) {
+		await page.evaluate(disableAnimations, options.disableAnimations);
+	}
+
+	if (Array.isArray(options.hideElements) && options.hideElements.length > 0) {
+		await page.addStyleTag({
+			content: `${options.hideElements.join(', ')} { visibility: hidden !important; }`,
+		});
+	}
+
+	if (Array.isArray(options.removeElements) && options.removeElements.length > 0) {
+		await page.addStyleTag({
+			content: `${options.removeElements.join(', ')} { display: none !important; }`,
+		});
+	}
+
+	if (options.clickElement) {
+		await page.click(options.clickElement);
+	}
+
+	const getInjectKey = (ext, value) => isUrl(value) ? 'url' : (value.endsWith(`.${ext}`) ? 'path' : 'content');
+
+	if (!options.isJavaScriptEnabled) {
+		// Enable JavaScript again for `modules` and `scripts`.
+		await page.setJavaScriptEnabled(true);
+	}
+
+	if (options.modules) {
+		await Promise.all(options.modules.map(module_ => page.addScriptTag({
+			[getInjectKey('js', module_)]: module_,
+			type: 'module',
+		})));
+	}
+
+	if (options.scripts) {
+		await Promise.all(options.scripts.map(script => page.addScriptTag({
+			[getInjectKey('js', script)]: script,
+		})));
+	}
+
+	if (options.styles) {
+		await Promise.all(options.styles.map(style => page.addStyleTag({
+			[getInjectKey('css', style)]: style,
+		})));
+	}
+
+	if (options.waitForElement) {
+		await page.waitForSelector(options.waitForElement, {
+			visible: true,
+			timeout: timeoutInMilliseconds,
+		});
+	}
+
+	if (options.element) {
+		await page.waitForSelector(options.element, {
+			visible: true,
+			timeout: timeoutInMilliseconds,
+		});
+	}
+
+	if (options.delay) {
+		await page.waitForTimeout(options.delay * 1000);
+	}
+
+	if (options.scrollToElement) {
+		// eslint-disable-next-line unicorn/prefer-ternary
+		if (typeof options.scrollToElement === 'object') {
+			await page.$eval(options.scrollToElement.element, scrollToElement, options.scrollToElement);
+		} else {
+			await page.$eval(options.scrollToElement, scrollToElement);
+		}
+	}
+
+	const buffer = await page.pdf(pdfOptions);
 	return buffer;
-};
+}
+
 
 const captureWebsite = {};
 
